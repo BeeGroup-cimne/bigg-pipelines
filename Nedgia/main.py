@@ -1,4 +1,7 @@
 import pandas as pd
+from neo4j import GraphDatabase
+
+from utils.utils import read_config
 
 tz_info = 'Europe/Madrid'
 
@@ -103,7 +106,20 @@ def harmonize_dataframe(dataframe):
     return interpolate_df[['CUPS', 'measurementStart', 'measurementEnd', 'measurementValue']]
 
 
+def create_measurement_list(df, config):
+    neo4j_connection = config['neo4j']
+    neo = GraphDatabase.driver(**neo4j_connection)
+
+    with neo.session() as session:
+        pass
+
+
+def save_ts_to_hbase(df, config):
+    pass
+
+
 if __name__ == '__main__':
+    config = read_config('../config.json')
     df = script_input()
 
     # Group by CUPS
@@ -137,8 +153,7 @@ if __name__ == '__main__':
         # Loop for each dataframe
         for df_i in list_of_dataframes:
             df_res = harmonize_dataframe(df_i)
-            print(df_res)
+            create_measurement_list(df=df_res, config=config)
+            save_ts_to_hbase(df=df_res, config=config)
 
-    # todo: MeasureList Day
-    # todo: time series -> HBASE
     # todo: inputs, workflows
