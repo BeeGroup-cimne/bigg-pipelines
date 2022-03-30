@@ -81,7 +81,9 @@ if __name__ == '__main__':
         else:
             list_of_dataframes.append(sub_df)
 
+        # Loop for each dataframe
         for df_i in list_of_dataframes:
+            # Calculate only if dataframe has at least one REAL value
             if 'REAL' in df_i['Tipo Lectura'].unique():
                 # Drop n rows until tipo lectura = REAL
                 first_real = df_i[df_i['Tipo Lectura'] == 'REAL'].index[0]
@@ -95,7 +97,9 @@ if __name__ == '__main__':
 
             df_i_real.set_index('measurementStart_dt', inplace=True)
 
-            interpolate_df = df_i_real[['cumsum']].resample('1D').interpolate().diff().bfill()
+            interpolate_df = df_i_real[['cumsum']].resample('1D').interpolate().diff().fillna(method='bfill')
+
+            print(interpolate_df)
 
             interpolate_df['measurementEnd_dt'] = interpolate_df.index + pd.Timedelta(hours=23)
 
@@ -105,8 +109,10 @@ if __name__ == '__main__':
                                            'measurementEnd_dt': 'measurementEnd'}, inplace=True)
             interpolate_df['CUPS'] = cups
 
-            # TIMESTAMP START AND END
+            interpolate_df['measurementStart'] = interpolate_df['measurementStart'].astype('int') / 10 ** 9
+            interpolate_df['measurementStart'] = interpolate_df['measurementStart'].astype('int')
 
-            if len(df_i_real) > 1:
-                break
-        break
+            interpolate_df['measurementEnd'] = interpolate_df['measurementEnd'].astype('int') / 10 ** 9
+            interpolate_df['measurementEnd'] = interpolate_df['measurementEnd'].astype('int')
+
+            print(interpolate_df)
