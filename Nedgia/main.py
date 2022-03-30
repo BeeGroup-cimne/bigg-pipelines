@@ -97,15 +97,17 @@ if __name__ == '__main__':
 
             df_i_real.set_index('measurementStart_dt', inplace=True)
 
-            interpolate_df = df_i_real[['cumsum']].resample('1D').interpolate().diff().fillna(method='bfill')
+            interpolate_df = df_i_real[['cumsum']].resample('1D').interpolate()
 
-            print(interpolate_df)
+            interpolate_df['diff'] = interpolate_df['cumsum'].diff()
+
+            interpolate_df.at[interpolate_df.index[0], 'diff'] = interpolate_df.iloc[0]['cumsum']
 
             interpolate_df['measurementEnd_dt'] = interpolate_df.index + pd.Timedelta(hours=23)
 
             interpolate_df.reset_index(inplace=True)
 
-            interpolate_df.rename(columns={'measurementStart_dt': 'measurementStart', 'cumsum': 'measurementValue',
+            interpolate_df.rename(columns={'measurementStart_dt': 'measurementStart', 'diff': 'measurementValue',
                                            'measurementEnd_dt': 'measurementEnd'}, inplace=True)
             interpolate_df['CUPS'] = cups
 
