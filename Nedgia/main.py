@@ -154,21 +154,37 @@ def create_measurement_list(df, device_id, args, config):
 
 def save_ts_to_hbase(df, device_id, args, config):
     hbase_conn2 = config['hbase_store_harmonized_data']
-    device_table = f"gasConsumption_period_device_{args.source}"
 
-    save_to_hbase(df.to_dict(orient="records"), device_table, hbase_conn2,
+    n = Namespace(args.namespace)
+
+    list_uri = n[f"{device_id}-DEVICE-{args.source}-LIST-PROJECTED-P1D"]
+    new_d_id = hashlib.sha256(list_uri.encode("utf-8"))
+    new_d_id = new_d_id.hexdigest()
+
+    df['listKey'] = new_d_id
+
+    save_to_hbase(df.to_dict(orient="records"), f"bigg_ts_EnergyConsumptionGas_P1D_{args.user}", hbase_conn2,
                   [("info", ['measurementEnd']), ("v", ['measurementValue'])],
-                  row_fields=['CUPS', 'measurementStart'])
+                  row_fields=['listKey', 'measurementStart'])
+
+    save_to_hbase(df.to_dict(orient="records"), f"bigg_analyticsTS_EnergyConsumptionGas_P1D_{args.user}", hbase_conn2,
+                  [("info", ['measurementEnd']), ("v", ['measurementValue'])],
+                  row_fields=['measurementStart', 'listKey'])
 
 
 if __name__ == '__main__':
+    # Arguments
     ap = argparse.ArgumentParser(description='Mapping of Gas data to neo4j.')
+    ap.add_argument("--user", "-u", help="The source importing the data", required=True)
     ap.add_argument("--source", "-so", help="The source importing the data", required=True)
     ap.add_argument("--namespace", "-n", help="The subjects namespace uri", required=True)
     ap.add_argument("--timezone", "-tz", help="The local timezone", required=True, default='Europe/Madrid')
     args = ap.parse_args()
 
+    # Read Config
     config = read_config('../config.json')
+
+    # Load Input
     df = script_input()
 
     # Group by CUPS
@@ -204,6 +220,4 @@ if __name__ == '__main__':
             df_res = harmonize_dataframe(df_i)
             if df_res is not None:
                 create_measurement_list(df=df_res, device_id=cups, args=args, config=config)
-                # save_ts_to_hbase(df=df_res, device_id=cups, args=args, config=config)
-
-    # todo: inputs, workflows
+                save_ts_to_hbase(df=df_res, device_id=cups, args=args, config=config)
