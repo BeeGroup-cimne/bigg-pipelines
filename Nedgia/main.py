@@ -1,7 +1,13 @@
+import argparse
+import hashlib
+from datetime import datetime
+
 import pandas as pd
 from neo4j import GraphDatabase
 
+from utils.hbase import save_to_hbase
 from utils.utils import read_config
+from rdflib import Namespace
 
 tz_info = 'Europe/Madrid'
 
@@ -106,19 +112,63 @@ def harmonize_dataframe(dataframe):
     return interpolate_df[['CUPS', 'measurementStart', 'measurementEnd', 'measurementValue']]
 
 
-def create_measurement_list(df, config):
+def create_measurement_list(df, device_id, args, config):
     neo4j_connection = config['neo4j']
     neo = GraphDatabase.driver(**neo4j_connection)
 
+    n = Namespace(args.namespace)
+    uri = n[f"{device_id}-DEVICE-{args.user}"]
+
     with neo.session() as session:
-        pass
+        list_uri = n[f"{device_id}-DEVICE-{args.user}-LIST-RAW-diary"]
+        new_d_id = hashlib.sha256(list_uri.encode("utf-8"))
+        new_d_id = new_d_id.hexdigest()
+
+        dt_ini = df['measurementStart'].iloc[0]
+        dt_end = df['measurementEnd'].iloc[-1]
+
+        query_measures = f"""
+            MATCH (device: ns0__Device {{uri:"{uri}"}})
+            MERGE (list: ns0__MeasurementList{{uri: "{list_uri}", ns0__measurementKey: "{new_d_id}",
+            ns0__measurementFrequency: "diary"}} )<-[:ns0__hasMeasurementLists]-(device)
+            SET
+                list.ns0__measurementUnit= "kWh",
+                list.ns0__measuredProperty= "gasConsumption",
+                list.ns0__measurementListStart = CASE
+                    WHEN list.ns0__measurementListStart <
+                     datetime("{datetime.fromtimestamp(dt_ini).isoformat()}")
+                        THEN list.ns0__measurementListStart
+                        ELSE datetime("{datetime.fromtimestamp(dt_ini).isoformat()}")
+                    END,
+                list.ns0__measurementListEnd = CASE
+                    WHEN list.ns0__measurementListEnd >
+                     datetime("{datetime.fromtimestamp(dt_end).isoformat()}")
+                        THEN list.ns0__measurementListStart
+                        ELSE datetime("{datetime.fromtimestamp(dt_end).isoformat()}")
+                    END
+            return list
+        """
+
+        # session.run(query_measures)
 
 
-def save_ts_to_hbase(df, config):
-    pass
+def save_ts_to_hbase(df, device_id, args, config):
+    hbase_conn2 = config['hbase_store_harmonized_data']
+    device_table = f"gasConsumption_period_device_{args.user}"
+
+    print(df)
+    save_to_hbase(df.to_dict(orient="records"), device_table, hbase_conn2,
+                  [("info", ['measurementEnd']), ("v", ['measurementValue'])],
+                  row_fields=['CUPS', 'measurementStart'])
 
 
 if __name__ == '__main__':
+    ap = argparse.ArgumentParser(description='Mapping of Gas data to neo4j.')
+    ap.add_argument("--user", "-u", help="The user importing the data", required=True)
+    ap.add_argument("--namespace", "-n", help="The subjects namespace uri", required=True)
+    ap.add_argument("--timezone", "-tz", help="The local timezone", required=True, default='Europe/Madrid')
+    args = ap.parse_args()
+
     config = read_config('../config.json')
     df = script_input()
 
@@ -153,7 +203,8 @@ if __name__ == '__main__':
         # Loop for each dataframe
         for df_i in list_of_dataframes:
             df_res = harmonize_dataframe(df_i)
-            create_measurement_list(df=df_res, config=config)
-            save_ts_to_hbase(df=df_res, config=config)
+            if df_res is not None:
+                create_measurement_list(df=df_res, device_id=cups, args=args, config=config)
+                save_ts_to_hbase(df=df_res, device_id=cups, args=args, config=config)
 
     # todo: inputs, workflows
