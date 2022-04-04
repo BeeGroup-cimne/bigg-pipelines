@@ -87,7 +87,7 @@ def harmonize_dataframe(dataframe):
 
     interpolate_df['diff'] = interpolate_df['cumsum'].diff()
 
-    interpolate_df.at[interpolate_df.index[0], 'diff'] = interpolate_df.iloc[0]['cumsum']
+    interpolate_df.at[interpolate_df.index[0], 'diff'] = interpolate_df.iloc[0]['cumsum'] # todo: monthly_value/ nº days of invoice
 
     interpolate_df['measurementEnd_dt'] = interpolate_df.index + pd.Timedelta(hours=23)
 
