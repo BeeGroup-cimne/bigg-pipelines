@@ -232,8 +232,5 @@ if __name__ == '__main__':
         for df_i in list_of_dataframes:
             df_res = harmonize_dataframe(df_i)
             if df_res is not None:
-                if len(df_res[df_res['value'] < 0].index) > 0:
-                    print(df_res['CUPS'].values)
-
-        #         create_measurement_list(df=df_res, device_id=cups, args=args, config=config)
-        #         save_ts_to_hbase(df=df_res, device_id=cups, args=args, config=config)
+                create_measurement_list(df=df_res, device_id=cups, args=args, config=config)
+                save_ts_to_hbase(df=df_res, device_id=cups, args=args, config=config)
