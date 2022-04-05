@@ -78,7 +78,7 @@ def split_dataframe(dataframe):
 def harmonize_dataframe(dataframe):
     if True in dataframe['isReal'].unique():
         # Drop n rows until REAL
-        first_real = dataframe[dataframe['isReal'] == True].index[0]
+        first_real = dataframe[(dataframe['isReal'] == True) & (dataframe['value'] >= 0)].index[0]
         df_i = dataframe.loc[first_real:]
     else:
         return
@@ -91,30 +91,30 @@ def harmonize_dataframe(dataframe):
     # Remove non real values
     df_removed = df_removed.drop(df_removed[df_removed['isReal'] == False].index)
 
-    df_removed.set_index('measurementStart_dt', inplace=True)
+    if len(df_removed.index) > 0:
+        df_removed.set_index('measurementStart_dt', inplace=True)
 
-    interpolate_df = df_removed[['cumsum']].resample('1D').interpolate()
+        interpolate_df = df_removed[['cumsum']].resample('1D').interpolate()
 
-    interpolate_df['diff'] = interpolate_df['cumsum'].diff()
+        interpolate_df['diff'] = interpolate_df['cumsum'].diff().shift(-1)
+        interpolate_df.dropna(subset=['diff'], inplace=True)
 
-    # interpolate_df.at[interpolate_df.index[0], 'diff'] = interpolate_df.iloc[0][
-    #     'cumsum']  # todo: monthly_value/ nº days of invoice
+        interpolate_df['measurementEnd_dt'] = interpolate_df.index + pd.Timedelta(hours=23)
 
-    # interpolate_df['measurementEnd_dt'] = interpolate_df.index + pd.Timedelta(hours=23)
-    #
-    # interpolate_df.reset_index(inplace=True)
-    #
-    # interpolate_df.rename(columns={'measurementStart_dt': 'start', 'diff': 'value',
-    #                                'measurementEnd_dt': 'end'}, inplace=True)
-    # interpolate_df['CUPS'] = cups
-    #
-    # interpolate_df['start'] = interpolate_df['start'].astype('int') / 10 ** 9
-    # interpolate_df['start'] = interpolate_df['start'].astype('int')
-    #
-    # interpolate_df['end'] = interpolate_df['end'].astype('int') / 10 ** 9
-    # interpolate_df['end'] = interpolate_df['end'].astype('int')
+        interpolate_df.reset_index(inplace=True)
 
-    return interpolate_df[['CUPS', 'start', 'end', 'value']]
+        interpolate_df.rename(columns={'measurementStart_dt': 'start', 'diff': 'value',
+                                       'measurementEnd_dt': 'end'}, inplace=True)
+        interpolate_df['CUPS'] = cups
+
+        interpolate_df['start'] = interpolate_df['start'].astype('int') / 10 ** 9
+        interpolate_df['start'] = interpolate_df['start'].astype('int')
+
+        interpolate_df['end'] = interpolate_df['end'].astype('int') / 10 ** 9
+        interpolate_df['end'] = interpolate_df['end'].astype('int')
+
+        return interpolate_df[['CUPS', 'start', 'end', 'value']]
+    return
 
 
 def create_measurement_list(df, device_id, args, config):
@@ -194,14 +194,13 @@ if __name__ == '__main__':
     args = ap.parse_args()
 
     # Read Config
-    config = read_config('config.json')
+    config = read_config('../config.json')
 
     # Load Input
     df = script_input(config)
+
     # Group by CUPS
     for cups, sub_df in df.groupby('CUPS'):
-        if False in sub_df.isReal.unique():
-            break
 
         # Convert Timestamps to Datetime
         sub_df.sort_values(by=['start'], inplace=True)
@@ -232,6 +231,9 @@ if __name__ == '__main__':
         # Loop for each dataframe
         for df_i in list_of_dataframes:
             df_res = harmonize_dataframe(df_i)
-        #     if df_res is not None:
+            if df_res is not None:
+                if len(df_res[df_res['value'] < 0].index) > 0:
+                    print(df_res['CUPS'].values)
+
         #         create_measurement_list(df=df_res, device_id=cups, args=args, config=config)
         #         save_ts_to_hbase(df=df_res, device_id=cups, args=args, config=config)
